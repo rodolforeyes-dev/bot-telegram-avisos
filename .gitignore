@@ -4,3 +4,4 @@ __pycache__/
 data/bot.db
 data/matches.json
 venv/
+bot.log
