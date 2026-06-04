@@ -3,6 +3,7 @@ from datetime import datetime, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 from telegram import Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from src.keyboards import (
@@ -39,6 +40,24 @@ def _get_matches():
     return _matches_cache
 
 
+async def _reply(update: Update, text: str, **kwargs):
+    if update.callback_query:
+        try:
+            await update.callback_query.message.reply_text(text, **kwargs)
+        except BadRequest:
+            pass
+    elif update.message:
+        await update.message.reply_text(text, **kwargs)
+
+
+async def _edit(update: Update, text: str, **kwargs):
+    if update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(text, **kwargs)
+        except BadRequest:
+            await _reply(update, text, **kwargs)
+
+
 def _get_user_tz(chat_id: int) -> ZoneInfo:
     user = get_user(chat_id)
     if user is None:
@@ -64,13 +83,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(chat_id)
     if user is None:
         create_user(chat_id, "UTC", "ALL")
-        await update.message.reply_text(
+        await _reply(update, 
             "👋 Welcome to FIFA World Cup 2026 Bot!\n\n"
             "How would you like to receive notifications?",
             reply_markup=subscription_mode_keyboard(),
         )
     else:
-        await update.message.reply_text(
+        await _reply(update, 
             "Welcome back! Use /help to see available commands.",
             reply_markup=main_menu_keyboard(),
         )
@@ -91,7 +110,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/teamsmode - Notify for selected teams only\n"
         "/timezone - Set your timezone"
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await _reply(update, text, parse_mode="Markdown")
 
 
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,13 +130,13 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
 
     if not today_matches:
-        await update.message.reply_text("No matches scheduled for today.")
+        await _reply(update, "No matches scheduled for today.")
         return
 
     lines = ["⚽ *Today's matches*\n"]
     for m in today_matches:
         lines.append(_format_match(m, user_tz))
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def next_matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,20 +165,20 @@ async def next_matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
     upcoming = upcoming[:10]
 
     if not upcoming:
-        await update.message.reply_text("No upcoming matches.")
+        await _reply(update, "No upcoming matches.")
         return
 
     lines = ["⚽ *Upcoming matches*\n"]
     for _, m in upcoming:
         lines.append(_format_match(m, user_tz))
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def teams(update: Update, context: ContextTypes.DEFAULT_TYPE):
     matches = _get_matches()
     all_teams = get_all_teams(matches)
     text = "🏆 *Available teams*\n\n" + "\n".join(f"• {t}" for t in all_teams)
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await _reply(update, text, parse_mode="Markdown")
 
 
 async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -168,7 +187,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     all_teams = get_all_teams(matches)
     selected = set(get_subscriptions(chat_id))
     context.user_data["sub_page"] = 0
-    await update.message.reply_text(
+    await _reply(update, 
         "Select teams to subscribe:",
         reply_markup=team_subscribe_keyboard(all_teams, selected, 0),
     )
@@ -180,7 +199,7 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     all_teams = get_all_teams(matches)
     selected = set(get_subscriptions(chat_id))
     context.user_data["unsub_page"] = 0
-    await update.message.reply_text(
+    await _reply(update, 
         "Select teams to unsubscribe:",
         reply_markup=team_unsubscribe_keyboard(all_teams, selected, 0),
     )
@@ -190,7 +209,7 @@ async def subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = get_user(chat_id)
     if user is None:
-        await update.message.reply_text("Please use /start first.")
+        await _reply(update, "Please use /start first.")
         return
 
     mode_text = "🌎 All matches" if user["subscription_mode"] == "ALL" else "⭐ Selected teams"
@@ -207,27 +226,27 @@ async def subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         lines.append("You are subscribed to all matches.")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def all_matches_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = get_user(chat_id)
     if user is None:
-        await update.message.reply_text("Please use /start first.")
+        await _reply(update, "Please use /start first.")
         return
     set_subscription_mode(chat_id, "ALL")
-    await update.message.reply_text("✅ You will now receive notifications for every World Cup match.")
+    await _reply(update, "✅ You will now receive notifications for every World Cup match.")
 
 
 async def teams_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = get_user(chat_id)
     if user is None:
-        await update.message.reply_text("Please use /start first.")
+        await _reply(update, "Please use /start first.")
         return
     set_subscription_mode(chat_id, "TEAMS")
-    await update.message.reply_text(
+    await _reply(update, 
         "✅ Team subscription mode enabled.\n"
         "Use /subscribe to choose your teams."
     )
@@ -237,12 +256,12 @@ async def set_tz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = get_user(chat_id)
     if user is None:
-        await update.message.reply_text("Please use /start first.")
+        await _reply(update, "Please use /start first.")
         return
 
     args = context.args
     if not args:
-        await update.message.reply_text(
+        await _reply(update, 
             "Usage: /timezone <timezone>\n\n"
             "Examples:\n"
             "• America/Argentina/Buenos_Aires\n"
@@ -256,16 +275,20 @@ async def set_tz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ZoneInfo(tz_str)
     except (KeyError, TypeError):
-        await update.message.reply_text(f"❌ Invalid timezone: {tz_str}")
+        await _reply(update, f"❌ Invalid timezone: {tz_str}")
         return
 
     set_timezone(chat_id, tz_str)
-    await update.message.reply_text(f"✅ Timezone set to {tz_str}")
+    await _reply(update, f"✅ Timezone set to {tz_str}")
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except BadRequest:
+        logger.warning("Stale callback query ignored")
+        return
     chat_id = update.effective_chat.id
     data = query.data
     matches = _get_matches()
@@ -274,7 +297,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Mode selection
     if data == "mode_ALL":
         set_subscription_mode(chat_id, "ALL")
-        await query.edit_message_text(
+        await _edit(update,
             "✅ You will now receive notifications for every World Cup match.\n\n"
             "Use /help to see all commands."
         )
@@ -284,7 +307,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_subscription_mode(chat_id, "TEAMS")
         selected = set(get_subscriptions(chat_id))
         context.user_data["sub_page"] = 0
-        await query.edit_message_text(
+        await _edit(update,
             "Select your teams:",
             reply_markup=team_subscribe_keyboard(all_teams, selected, 0),
         )
@@ -297,13 +320,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data == "sub_done":
             context.user_data.pop("sub_page", None)
-            await query.edit_message_text("✅ Subscriptions updated!")
+            await _edit(update, "✅ Subscriptions updated!")
             return
 
         if data.startswith("sub_page:"):
             page = int(data.split(":")[1])
             context.user_data["sub_page"] = page
-            await query.edit_message_text(
+            await _edit(update,
                 "Select teams to subscribe:",
                 reply_markup=team_subscribe_keyboard(all_teams, selected, page),
             )
@@ -317,7 +340,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 subscribe_team(chat_id, team)
                 selected.add(team)
-            await query.edit_message_text(
+            await _edit(update,
                 "Select teams to subscribe:",
                 reply_markup=team_subscribe_keyboard(all_teams, selected, page),
             )
@@ -330,13 +353,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data == "unsub_done":
             context.user_data.pop("unsub_page", None)
-            await query.edit_message_text("✅ Subscriptions updated!")
+            await _edit(update, "✅ Subscriptions updated!")
             return
 
         if data.startswith("unsub_page:"):
             page = int(data.split(":")[1])
             context.user_data["unsub_page"] = page
-            await query.edit_message_text(
+            await _edit(update,
                 "Select teams to unsubscribe:",
                 reply_markup=team_unsubscribe_keyboard(all_teams, selected, page),
             )
@@ -347,7 +370,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if team in selected:
                 unsubscribe_team(chat_id, team)
                 selected.discard(team)
-            await query.edit_message_text(
+            await _edit(update,
                 "Select teams to unsubscribe:",
                 reply_markup=team_unsubscribe_keyboard(all_teams, selected, page),
             )
@@ -365,4 +388,4 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.warning("Unknown callback data: %s", data)
-    await query.edit_message_text("Unknown option. Please use /help.")
+    await _edit(update, "Unknown option. Please use /help.")
