@@ -25,6 +25,7 @@ def init_db():
                 timezone TEXT NOT NULL,
                 subscription_mode TEXT NOT NULL,
                 notify_before_minutes INTEGER DEFAULT 120,
+                language TEXT NOT NULL DEFAULT 'es',
                 created_at TEXT NOT NULL
             );
 
@@ -43,6 +44,12 @@ def init_db():
             );
         """)
         conn.commit()
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'es'")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
         logger.info("Database initialized at %s", DB_PATH)
     except Exception:
         logger.exception("Failed to initialize database")

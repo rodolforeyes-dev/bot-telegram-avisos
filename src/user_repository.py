@@ -27,7 +27,7 @@ def get_user(chat_id: int) -> Optional[dict]:
     try:
         conn = get_connection()
         row = conn.execute(
-            "SELECT chat_id, timezone, subscription_mode, notify_before_minutes FROM users WHERE chat_id = ?",
+            "SELECT chat_id, timezone, subscription_mode, notify_before_minutes, language FROM users WHERE chat_id = ?",
             (chat_id,),
         ).fetchone()
         conn.close()
@@ -37,6 +37,18 @@ def get_user(chat_id: int) -> Optional[dict]:
     except Exception:
         logger.exception("Failed to get user %s", chat_id)
         return None
+
+
+def set_language(chat_id: int, language: str) -> bool:
+    try:
+        conn = get_connection()
+        conn.execute("UPDATE users SET language = ? WHERE chat_id = ?", (language, chat_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        logger.exception("Failed to set language for %s", chat_id)
+        return False
 
 
 def set_timezone(chat_id: int, timezone: str) -> bool:
@@ -131,7 +143,7 @@ def get_all_users() -> list[dict]:
     try:
         conn = get_connection()
         rows = conn.execute(
-            "SELECT chat_id, timezone, subscription_mode, notify_before_minutes FROM users"
+            "SELECT chat_id, timezone, subscription_mode, notify_before_minutes, language FROM users"
         ).fetchall()
         conn.close()
         return [dict(row) for row in rows]

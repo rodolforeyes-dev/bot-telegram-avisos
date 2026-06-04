@@ -1,12 +1,21 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from src.i18n import t
+
 PAGE_SIZE = 10
 
 
-def subscription_mode_keyboard() -> InlineKeyboardMarkup:
+def subscription_mode_keyboard(lang: str = "es") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌎 All World Cup matches", callback_data="mode_ALL")],
-        [InlineKeyboardButton("⭐ Selected teams only", callback_data="mode_TEAMS")],
+        [InlineKeyboardButton(t(lang, "mode_btn_all"), callback_data="mode_ALL")],
+        [InlineKeyboardButton(t(lang, "mode_btn_teams"), callback_data="mode_TEAMS")],
+    ])
+
+
+def language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
+        [InlineKeyboardButton("🇦🇷 Español", callback_data="lang_es")],
     ])
 
 
@@ -43,9 +52,9 @@ def _team_pagination(all_teams: list[str], selected: set[str], page: int, prefix
     return InlineKeyboardMarkup(keyboard)
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard(lang: str = "es") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📅 Today's matches", callback_data="cmd_today")],
-        [InlineKeyboardButton("⚽ Next matches", callback_data="cmd_next")],
-        [InlineKeyboardButton("👥 My subscriptions", callback_data="cmd_subscriptions")],
+        [InlineKeyboardButton(t(lang, "main_today"), callback_data="cmd_today")],
+        [InlineKeyboardButton(t(lang, "main_next"), callback_data="cmd_next")],
+        [InlineKeyboardButton(t(lang, "main_subs"), callback_data="cmd_subscriptions")],
     ])

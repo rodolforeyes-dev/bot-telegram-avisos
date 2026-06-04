@@ -4,7 +4,8 @@ from zoneinfo import ZoneInfo
 
 from telegram import Bot
 
-from src.match_repository import load_matches, get_matches_for_team
+from src.i18n import t, reminder_label
+from src.match_repository import load_matches
 from src.user_repository import get_all_users, get_subscriptions
 from src.notification_service import is_notification_sent, mark_notification_sent
 from src.config import MATCHES_PATH
@@ -12,9 +13,9 @@ from src.config import MATCHES_PATH
 logger = logging.getLogger(__name__)
 
 REMINDER_CONFIGS = [
-    ("120M", 120, "2 hours"),
-    ("60M", 60, "1 hour"),
-    ("15M", 15, "15 minutes"),
+    ("120M", 120),
+    ("60M", 60),
+    ("15M", 15),
 ]
 
 
@@ -30,6 +31,7 @@ async def check_match_reminders(bot: Bot):
 
     for user in users:
         chat_id = user["chat_id"]
+        lang = user.get("language", "es")
         try:
             user_tz = ZoneInfo(user["timezone"])
         except (KeyError, TypeError):
@@ -53,7 +55,7 @@ async def check_match_reminders(bot: Bot):
 
             minutes_until = diff / 60.0
 
-            for notif_type, threshold, label in REMINDER_CONFIGS:
+            for notif_type, threshold in REMINDER_CONFIGS:
                 if minutes_until > threshold:
                     continue
                 if is_notification_sent(chat_id, match.id, notif_type):
@@ -65,12 +67,10 @@ async def check_match_reminders(bot: Bot):
                 except Exception:
                     time_str = match.kickoff_utc
 
-                text = (
-                    f"⏰ Match starts in {label}\n\n"
-                    f"{match.home_team} vs {match.away_team}\n"
-                    f"🕒 {time_str}\n"
-                    f"🏟️ {match.stadium}"
-                )
+                label = reminder_label(notif_type, lang)
+                text = t(lang, "reminder", label=label,
+                         home=match.home_team, away=match.away_team,
+                         time=time_str, stadium=match.stadium)
                 try:
                     await bot.send_message(chat_id=chat_id, text=text)
                     mark_notification_sent(chat_id, match.id, notif_type)
@@ -91,10 +91,10 @@ async def check_daily_summaries(bot: Bot):
         return
 
     users = get_all_users()
-    today_date = None
 
     for user in users:
         chat_id = user["chat_id"]
+        lang = user.get("language", "es")
         try:
             user_tz = ZoneInfo(user["timezone"])
         except (KeyError, TypeError):
@@ -130,12 +130,12 @@ async def check_daily_summaries(bot: Bot):
 
         today_matches.sort(key=lambda x: x[0])
 
-        lines = ["⚽ FIFA World Cup 2026\n", "Today's matches\n"]
+        lines = [t(lang, "daily_header")]
         for local, m in today_matches:
-            lines.append(f"{local.strftime('%H:%M')}  {m.home_team} vs {m.away_team}")
+            lines.append(f"\n{local.strftime('%H:%M')}  {m.home_team} vs {m.away_team}")
 
         try:
-            await bot.send_message(chat_id=chat_id, text="\n".join(lines))
+            await bot.send_message(chat_id=chat_id, text="".join(lines))
             mark_notification_sent(chat_id, f"daily_{day_str}", "DAILY")
             logger.info("Sent daily summary to %s", chat_id)
         except Exception:
