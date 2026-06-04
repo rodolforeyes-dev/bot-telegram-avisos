@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -32,11 +37,20 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
 async def error_handler(update: Update | None, context: ContextTypes.DEFAULT_TYPE):
     logger.error("Unhandled error: %s", context.error, exc_info=context.error)
+
+
+async def post_init(app):
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(check_match_reminders, "interval", minutes=5, args=[app.bot])
+    scheduler.add_job(check_daily_summaries, "interval", hours=1, args=[app.bot])
+    scheduler.start()
+    logger.info("Schedulers started")
 
 
 def main():
@@ -56,7 +70,7 @@ def main():
         logger.error("TELEGRAM_BOT_TOKEN not set. Create a .env file with TELEGRAM_BOT_TOKEN=your_token")
         return
 
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
@@ -71,12 +85,6 @@ def main():
     app.add_handler(CommandHandler("timezone", set_tz))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_error_handler(error_handler)
-
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(check_match_reminders, "interval", minutes=5, args=[app.bot])
-    scheduler.add_job(check_daily_summaries, "interval", hours=1, args=[app.bot])
-    scheduler.start()
-    logger.info("Schedulers started")
 
     logger.info("Bot started polling")
     app.run_polling(allowed_updates=["message", "callback_query"])
